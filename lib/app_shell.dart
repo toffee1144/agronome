@@ -16,7 +16,9 @@ class _AppShellState extends State<AppShell> {
   static const Color _green = Color(0xFF76B947);
   static const Color _inactive = Color(0xFF111827);
 
-  int _index = 0; // start at DASHBOARD
+  int _index = 0;
+
+  final ValueNotifier<int> _tabNotifier = ValueNotifier<int>(0);
 
   final _homeKey = GlobalKey<NavigatorState>();
   final _dashboardKey = GlobalKey<NavigatorState>();
@@ -39,19 +41,21 @@ class _AppShellState extends State<AppShell> {
       return false;
     }
     if (_index != 1) {
-      setState(() => _index = 1);
+      _setTab(1);
       return false;
     }
     return true;
   }
 
-  void _onTap(int i) {
+  void _setTab(int i) {
     if (i == _index) {
       final nav = _currentKey.currentState;
       nav?.popUntil((r) => r.isFirst);
+      _tabNotifier.value = i;
       return;
     }
     setState(() => _index = i);
+    _tabNotifier.value = i;
   }
 
   @override
@@ -65,74 +69,52 @@ class _AppShellState extends State<AppShell> {
           children: [
             _TabNavigator(
               navigatorKey: _homeKey,
-              root: const AgronomeHomePage(),
+              child: AgronomeHomePage(tabNotifier: _tabNotifier),
             ),
             _TabNavigator(
               navigatorKey: _dashboardKey,
-              root: const DashboardPage(),
+              child: const DashboardPage(),
             ),
             _TabNavigator(
               navigatorKey: _messageKey,
-              root: const MessageChatPage(),
+              child: const MessageChatPage(),
             ),
             _TabNavigator(
               navigatorKey: _profileKey,
-              root: const ProfileSettingsPage(),
+              child: const ProfileSettingsPage(),
             ),
           ],
         ),
-        bottomNavigationBar: Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.06),
-                blurRadius: 18,
-                offset: const Offset(0, -6),
-              ),
-            ],
-          ),
-          child: SafeArea(
-            top: false,
-            child: SizedBox(
-              height: 72,
-              child: BottomNavigationBar(
-                currentIndex: _index,
-                type: BottomNavigationBarType.fixed,
-                backgroundColor: Colors.white,
-                elevation: 0,
-                selectedItemColor: _green,
-                unselectedItemColor: _inactive,
-                selectedLabelStyle: const TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.2,
+        bottomNavigationBar: SafeArea(
+          top: false,
+          child: SizedBox(
+            height: 72,
+            child: BottomNavigationBar(
+              currentIndex: _index,
+              type: BottomNavigationBarType.fixed,
+              backgroundColor: Colors.white,
+              elevation: 0,
+              selectedItemColor: _green,
+              unselectedItemColor: _inactive,
+              onTap: _setTab,
+              items: const [
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.home_rounded, size: 26),
+                  label: 'HOME',
                 ),
-                unselectedLabelStyle: const TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.2,
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.bar_chart_rounded, size: 26),
+                  label: 'DASHBOARD',
                 ),
-                onTap: _onTap,
-                items: const [
-                  BottomNavigationBarItem(
-                    icon: Icon(Icons.home_rounded, size: 26),
-                    label: 'HOME',
-                  ),
-                  BottomNavigationBarItem(
-                    icon: Icon(Icons.bar_chart_rounded, size: 26),
-                    label: 'DASHBOARD',
-                  ),
-                  BottomNavigationBarItem(
-                    icon: Icon(Icons.near_me_outlined, size: 26),
-                    label: 'MESSAGE',
-                  ),
-                  BottomNavigationBarItem(
-                    icon: Icon(Icons.person_rounded, size: 26),
-                    label: 'PROFILE',
-                  ),
-                ],
-              ),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.near_me_outlined, size: 26),
+                  label: 'MESSAGE',
+                ),
+                BottomNavigationBarItem(
+                  icon: Icon(Icons.person_rounded, size: 26),
+                  label: 'PROFILE',
+                ),
+              ],
             ),
           ),
         ),
@@ -143,75 +125,19 @@ class _AppShellState extends State<AppShell> {
 
 class _TabNavigator extends StatelessWidget {
   final GlobalKey<NavigatorState> navigatorKey;
-  final Widget root;
+  final Widget child;
 
   const _TabNavigator({
     required this.navigatorKey,
-    required this.root,
+    required this.child,
   });
 
   @override
   Widget build(BuildContext context) {
     return Navigator(
       key: navigatorKey,
-      onGenerateRoute: (_) => MaterialPageRoute(builder: (_) => root),
-    );
-  }
-}
-
-class _HomePlaceholder extends StatelessWidget {
-  const _HomePlaceholder();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Scaffold(
-      backgroundColor: Color(0xFFF6F7F8),
-      body: SafeArea(
-        child: Center(
-          child: Text(
-            'Home',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _MessagePlaceholder extends StatelessWidget {
-  const _MessagePlaceholder();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Scaffold(
-      backgroundColor: Color(0xFFF6F7F8),
-      body: SafeArea(
-        child: Center(
-          child: Text(
-            'Message',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ProfilePlaceholder extends StatelessWidget {
-  const _ProfilePlaceholder();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Scaffold(
-      backgroundColor: Color(0xFFF6F7F8),
-      body: SafeArea(
-        child: Center(
-          child: Text(
-            'Profile',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-          ),
-        ),
-      ),
+      onGenerateRoute: (_) =>
+          MaterialPageRoute(builder: (_) => child),
     );
   }
 }
