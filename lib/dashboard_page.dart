@@ -1,11 +1,13 @@
 // lib/dashboard_page.dart
 import 'dart:async';
 
+import 'package:agronome/fullscreen_live_page.dart';
 import 'package:agronome/live_api.dart';
 import 'package:agronome/survey_api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_mjpeg/flutter_mjpeg.dart';
 import 'package:video_player/video_player.dart';
+import 'package:flutter/services.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
@@ -425,17 +427,14 @@ class _Segmented extends StatelessWidget {
   }
 }
 
-class _LivePreviewCard extends StatelessWidget {
+class _LivePreviewCard extends StatefulWidget {
   final BoxDecoration decoration;
-
   final String streamUrl;
   final bool running;
   final bool hasFrame;
   final double? secondsSinceFrame;
-
   final bool recordEnabled;
   final bool recordingActive;
-
   final bool busy;
   final VoidCallback onToggle;
   final VoidCallback onSnapshot;
@@ -453,10 +452,71 @@ class _LivePreviewCard extends StatelessWidget {
     required this.onSnapshot,
   });
 
+  @override
+  State<_LivePreviewCard> createState() => _LivePreviewCardState();
+}
+
+class _LivePreviewCardState extends State<_LivePreviewCard> {
   static const green = Color(0xFF76B947);
+
+  bool _isFullscreen = false;
+  bool _showControls = true;
+  Timer? _hideTimer;
+
+  void _showThenAutoHide() {
+    _hideTimer?.cancel();
+    setState(() => _showControls = true);
+    _hideTimer = Timer(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _showControls = false);
+    });
+  }
+
+  Future<void> _toggleFullscreen() async {
+  if (_isFullscreen) {
+    await SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+    ]);
+    await SystemChrome.setEnabledSystemUIMode(
+      SystemUiMode.edgeToEdge,
+    );
+  } else {
+    await SystemChrome.setPreferredOrientations([
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
+    await SystemChrome.setEnabledSystemUIMode(
+      SystemUiMode.immersiveSticky,
+    );
+  }
+
+  if (!mounted) return;
+
+  setState(() {
+    _isFullscreen = !_isFullscreen;
+  });
+}
+
+
+  @override
+  void dispose() {
+    _hideTimer?.cancel();
+
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+    ]);
+    SystemChrome.setEnabledSystemUIMode(
+      SystemUiMode.edgeToEdge,
+    );
+
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
+    final running = widget.running;
+    final hasFrame = widget.hasFrame;
+    final busy = widget.busy;
+
     final showNoFrame = running && !hasFrame;
     final snapEnabled = running && hasFrame && !busy;
 
@@ -469,136 +529,209 @@ class _LivePreviewCard extends StatelessWidget {
     if (!running) {
       badgeText = 'OFF';
     } else if (!hasFrame) {
-      final s = secondsSinceFrame;
+      final s = widget.secondsSinceFrame;
       badgeText = s == null ? 'NO FRAME' : 'NO FRAME ${s.toStringAsFixed(1)}s';
     } else {
       badgeText = 'LIVE';
     }
+    
 
-    final showRec = recordEnabled && recordingActive;
+    final showRec = widget.recordEnabled && widget.recordingActive;
 
-    return Container(
-      decoration: decoration,
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(18),
-        child: SizedBox(
-          height: 200,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              if (running)
-                Mjpeg(
-                  key: ValueKey(streamUrl),
-                  isLive: true,
-                  stream: streamUrl,
-                  fit: BoxFit.cover,
-                )
-              else
-                Container(color: const Color(0xFF111827)),
-              if (!running)
-                const Center(
-                  child: Text(
-                    'Camera is stopped',
-                    style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w700),
-                  ),
-                ),
-              if (showNoFrame)
-                Container(
-                  color: Colors.black.withOpacity(0.45),
-                  child: const Center(
+    return GestureDetector(
+      onTap: _showThenAutoHide,
+      child: Container(
+        decoration: widget.decoration,
+        padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(18),
+          child: SizedBox(
+            height: 200,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                // 1. VIDEO PALING BAWAH
+                if (running)
+                  Mjpeg(
+                    key: ValueKey(widget.streamUrl),
+                    isLive: true,
+                    stream: widget.streamUrl,
+                    fit: BoxFit.cover,
+                  )
+                else
+                  Container(color: const Color(0xFF111827)),
+
+                // 2. STATUS OVERLAY
+                if (!running)
+                  const Center(
                     child: Text(
-                      'Check camera',
-                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
+                      'Camera is stopped',
+                      style: TextStyle(color: Colors.white70, fontWeight: FontWeight.w700),
                     ),
                   ),
-                ),
-              Positioned(
-                top: 12,
-                left: 12,
-                child: _Badge(
-                  text: badgeText,
-                  bg: Colors.black.withOpacity(0.55),
-                  fg: Colors.white,
-                ),
-              ),
-              if (showRec)
+
+                if (showNoFrame)
+                  Container(
+                    color: Colors.black.withOpacity(0.45),
+                    child: const Center(
+                      child: Text(
+                        'Check camera',
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800),
+                      ),
+                    ),
+                  ),
+
                 Positioned(
                   top: 12,
-                  right: 12,
+                  left: 12,
                   child: _Badge(
-                    text: 'REC',
-                    bg: Colors.red.withOpacity(0.75),
+                    text: badgeText,
+                    bg: Colors.black.withOpacity(0.55),
                     fg: Colors.white,
                   ),
                 ),
-              Positioned(
-                left: 12,
-                bottom: 12,
-                child: _Badge(
-                  text: clock,
-                  bg: Colors.black.withOpacity(0.55),
-                  fg: Colors.white,
-                ),
-              ),
-              Center(
-                child: InkWell(
-                  onTap: busy ? null : onToggle,
-                  borderRadius: BorderRadius.circular(999),
-                  child: Container(
-                    width: 74,
-                    height: 74,
-                    decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                    child: Center(
-                      child: busy
-                          ? const SizedBox(
-                              width: 22,
-                              height: 22,
-                              child: CircularProgressIndicator(strokeWidth: 3),
-                            )
-                          : Icon(
-                              running ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                              size: 34,
-                              color: green,
-                            ),
+
+                if (showRec)
+                  Positioned(
+                    top: 12,
+                    right: 12,
+                    child: _Badge(
+                      text: 'REC',
+                      bg: Colors.red.withOpacity(0.75),
+                      fg: Colors.white,
                     ),
                   ),
+
+                Positioned(
+                  left: 12,
+                  bottom: 12,
+                  child: _Badge(
+                    text: clock,
+                    bg: Colors.black.withOpacity(0.55),
+                    fg: Colors.white,
+                  ),
                 ),
-              ),
-              Positioned(
-                right: 12,
-                bottom: 12,
-                child: InkWell(
-                  onTap: snapEnabled ? onSnapshot : null,
-                  borderRadius: BorderRadius.circular(12),
-                  child: Opacity(
-                    opacity: snapEnabled ? 1 : 0.45,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.55),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.camera_alt_rounded, size: 16, color: Colors.white),
-                          SizedBox(width: 8),
-                          Text(
-                            'Snapshot',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.white,
+
+                // 3. FULLSCREEN ICON
+                Positioned(
+                  top: 12,
+                  right: showRec ? 56 : 12,
+                  child: AnimatedOpacity(
+                    opacity: _showControls ? 1 : 0,
+                    duration: const Duration(milliseconds: 200),
+                    child: InkWell(
+                      onTap: () {
+                        Navigator.of(
+                          context, 
+                          rootNavigator: true
+                        ).push(
+                          MaterialPageRoute(
+                            builder: (_) => FullscreenLivePage(
+                              streamUrl: widget.streamUrl,
+                              running: widget.running,
+                              hasFrame: widget.hasFrame,
+                              secondsSinceFrame: widget.secondsSinceFrame,
+                              recordEnabled: widget.recordEnabled,
+                              recordingActive: widget.recordingActive,
+                              busy: widget.busy,
+                              onToggle: widget.onToggle,
+                              onSnapshot: widget.onSnapshot,
                             ),
                           ),
-                        ],
+                        );
+                      },
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.55),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(
+                          _isFullscreen
+                              ? Icons.fullscreen_exit_rounded
+                              : Icons.fullscreen_rounded,
+                          color: Colors.white,
+                          size: 18,
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-            ],
+
+                // 4. PLAY / PAUSE
+                Center(
+                  child: AnimatedOpacity(
+                    opacity: _showControls ? 1 : 0,
+                    duration: const Duration(milliseconds: 200),
+                    child: InkWell(
+                      onTap: busy
+                          ? null
+                          : () {
+                              widget.onToggle();
+                              _showThenAutoHide();
+                            },
+                      borderRadius: BorderRadius.circular(999),
+                      child: Container(
+                        width: 74,
+                        height: 74,
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Center(
+                          child: busy
+                              ? const CircularProgressIndicator(strokeWidth: 3)
+                              : Icon(
+                                  running
+                                      ? Icons.pause_rounded
+                                      : Icons.play_arrow_rounded,
+                                  size: 34,
+                                  color: green,
+                                ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+
+                // 5. SNAPSHOT
+                Positioned(
+                  right: 12,
+                  bottom: 12,
+                  child: InkWell(
+                    onTap: snapEnabled ? widget.onSnapshot : null,
+                    borderRadius: BorderRadius.circular(12),
+                    child: Opacity(
+                      opacity: snapEnabled ? 1 : 0.45,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.55),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.camera_alt_rounded, size: 16, color: Colors.white),
+                            SizedBox(width: 8),
+                            Text(
+                              'Snapshot',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w800,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ]
+
+            ),
           ),
         ),
       ),
